@@ -143,12 +143,14 @@
     color: var(--muted);
   }
 
-  .arch-diagram {
+  pre.arch-diagram {
     font-family: "JetBrains Mono", Menlo, Consolas, monospace;
     background: var(--code-bg); border: 1px solid var(--code-border);
     border-radius: 10px; padding: 18px; white-space: pre;
     font-size: 12.5px; line-height: 1.5; overflow-x: auto;
     color: #d4d8e1;
+    margin: 14px 0;
+    tab-size: 4;
   }
 
   footer {
@@ -273,7 +275,7 @@
   </table>
 
   <h3>三層架構（Three-layer Architecture）</h3>
-  <div class="arch-diagram">┌──────────────────────────────────────────────────────────────┐
+  <pre class="arch-diagram">┌──────────────────────────────────────────────────────────────┐
 │                   Schema Layer (規則)                         │
 │   purpose.md  +  schema.md  +  CLAUDE.md / AGENTS.md          │
 │   ── 定義 Wiki 的「為什麼」與「怎麼做」                         │
@@ -294,7 +296,7 @@
 │                Raw Sources Layer (不可變)                     │
 │   raw/sources/  ──  PDF / DOCX / PPTX / MD / 網頁剪輯         │
 │   raw/assets/   ──  本地圖片                                  │
-└──────────────────────────────────────────────────────────────┘</div>
+└──────────────────────────────────────────────────────────────┘</pre>
 
   <h3>三個核心操作（Operations）</h3>
   <ul>
@@ -314,7 +316,7 @@
   </figure>
 
   <h3>整體架構圖</h3>
-  <div class="arch-diagram">┌────────────────────────────────────────────────────────────────────┐
+  <pre class="arch-diagram">┌────────────────────────────────────────────────────────────────────┐
 │  Chrome Extension (Manifest V3)                                     │
 │  ─ Readability.js + Turndown.js → 網頁 → Markdown                    │
 │  ─ POST → http://127.0.0.1:19827/clip  (local HTTP API)              │
@@ -339,7 +341,7 @@
 │  │  • commands/claude_cli  Claude Code CLI subprocess transport    ││
 │  │  • clip_server.rs       tiny_http: port 19827 接收瀏覽器剪輯     ││
 │  │  • proxy.rs             統一代理設定                             ││
-│  │  • panic_guard.rs       第三方解析器 panic → Result<E>           ││
+│  │  • panic_guard.rs       第三方解析器 panic → Result&lt;E&gt;           ││
 │  └────────────────────────────────────────────────────────────────┘│
 │                                                                     │
 │  ┌── Storage (本機檔案系統) ───────────────────────────────────────┐│
@@ -356,7 +358,7 @@
 ┌────────────────────────────────────────────────────────────────────┐
 │  外部 LLM / 服務（streaming fetch）                                  │
 │  OpenAI · Anthropic · Google · Ollama · Custom · Tavily(web search) │
-└────────────────────────────────────────────────────────────────────┘</div>
+└────────────────────────────────────────────────────────────────────┘</pre>
 
   <h3>技術棧一覽</h3>
   <table>
