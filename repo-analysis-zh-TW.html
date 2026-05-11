@@ -160,10 +160,18 @@
     margin-top: 64px;
   }
 
-  .kbd {
-    display: inline-block; padding: 1px 6px; border-radius: 4px;
-    background: #20242f; border: 1px solid #2c3142; font-size: 12px;
-    font-family: "JetBrains Mono", monospace;
+  .card-text-sm { font-size: 14px; }
+
+  figure.shot {
+    margin: 18px 0; padding: 0;
+    border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; background: var(--panel);
+  }
+  figure.shot img { display: block; width: 100%; height: auto; }
+  figure.shot figcaption {
+    color: var(--muted); font-size: 13px;
+    padding: 10px 14px; border-top: 1px solid var(--border);
+    background: var(--panel-2);
   }
 </style>
 </head>
@@ -188,7 +196,7 @@
   </div>
 </header>
 
-<nav class="toc">
+<nav class="toc" role="doc-toc" aria-label="目錄">
   <ul>
     <li><a href="#overview">專案概述</a></li>
     <li><a href="#philosophy">核心理念</a></li>
@@ -218,18 +226,23 @@
     這份 Wiki 隨著時間推進不斷豐富，且因為儲存格式為純 Markdown，可以直接用 Obsidian 開啟瀏覽。
   </p>
 
+  <figure class="shot">
+    <img src="assets/overview.jpg" alt="LLM Wiki 應用整體介面：左側知識樹、中間聊天區、右側預覽">
+    <figcaption>LLM Wiki 桌面應用整體介面（三欄式佈局：知識樹 / 聊天 / 預覽）</figcaption>
+  </figure>
+
   <div class="grid grid-3">
     <div class="card accent">
       <h4>定位</h4>
-      <p style="font-size:14px;">個人 / 研究 / 團隊知識庫構建工具，主打「LLM 維護、人類策展」的角色分工。</p>
+      <p class="card-text-sm">個人 / 研究 / 團隊知識庫構建工具，主打「LLM 維護、人類策展」的角色分工。</p>
     </div>
     <div class="card accent">
       <h4>哲學基礎</h4>
-      <p style="font-size:14px;">源自 Andrej Karpathy 公開的 <code>llm-wiki.md</code> 抽象模式，本專案是其具體實作版本。</p>
+      <p class="card-text-sm">源自 Andrej Karpathy 公開的 <code>llm-wiki.md</code> 抽象模式，本專案是其具體實作版本。</p>
     </div>
     <div class="card accent">
       <h4>技術形態</h4>
-      <p style="font-size:14px;">Tauri 桌面 App + Chrome Extension + 本地 HTTP API（port 19827）+ 可選向量資料庫。</p>
+      <p class="card-text-sm">Tauri 桌面 App + Chrome Extension + 本地 HTTP API（port 19827）+ 可選向量資料庫。</p>
     </div>
   </div>
 </section>
@@ -294,6 +307,11 @@
 <!-- ===================== 3. 系統架構 ===================== -->
 <section id="architecture">
   <h2><span class="num">03</span>系統架構與技術選型</h2>
+
+  <figure class="shot">
+    <img src="assets/llm_wiki_arch.jpg" alt="LLM Wiki 系統架構示意圖">
+    <figcaption>LLM Wiki 高階系統架構（來源：專案 README）</figcaption>
+  </figure>
 
   <h3>整體架構圖</h3>
   <div class="arch-diagram">┌────────────────────────────────────────────────────────────────────┐
@@ -366,6 +384,11 @@
   <h2><span class="num">04</span>主要功能特色（相對 Karpathy 原模式的擴充）</h2>
 
   <p>原模式僅是一份抽象設計文件，本專案在此之上實作了 18+ 項具體擴充：</p>
+
+  <figure class="shot">
+    <img src="assets/kg_insights.jpg" alt="Graph Insights 介面：驚奇連結、知識缺口、橋接節點">
+    <figcaption>Graph Insights — 自動偵測驚奇連結、孤立頁、橋接節點，可一鍵觸發 Deep Research</figcaption>
+  </figure>
 
   <div class="grid grid-2">
     <div class="card good">
@@ -475,6 +498,11 @@ Step 2（生成）：LLM 接收分析 → 產生 Wiki 檔案
     程式碼位於 <code>src/lib/ingest.ts</code>（1614 行）。設計上將「理解」與「寫作」拆開，
     避免單次呼叫同時兼顧分析品質與輸出格式所造成的劣化，並讓中間結果易於除錯與快取。
   </p>
+
+  <figure class="shot">
+    <img src="assets/3-knowledge_graph.jpg" alt="知識圖譜視覺化">
+    <figcaption>5.2 節：知識圖譜視覺化（sigma.js + ForceAtlas2，節點以社群著色）</figcaption>
+  </figure>
 
   <h3>5.2 4 訊號相關性模型（Knowledge Graph）</h3>
   <table>
