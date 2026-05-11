@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Wiki — 專案技術深度解析（繁體中文）</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1c2030;
+    --border: #262b3a;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #7cc4ff;
+    --accent-2: #a78bfa;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --code-bg: #0b0d12;
+    --code-border: #1e2330;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+                 system-ui, -apple-system, sans-serif;
+    line-height: 1.75;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 48px 28px 96px; }
+  header.hero {
+    text-align: center;
+    padding: 48px 24px 56px;
+    background: radial-gradient(ellipse at top,
+                rgba(124, 196, 255, 0.12), transparent 70%);
+    border-bottom: 1px solid var(--border);
+  }
+  header.hero h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    margin: 0 0 12px;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #7cc4ff, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header.hero .subtitle { color: var(--muted); font-size: 17px; max-width: 720px; margin: 0 auto; }
+  header.hero .meta { color: var(--muted); font-size: 13px; margin-top: 18px; }
+  header.hero .badges { margin-top: 18px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 4px 10px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    color: var(--muted); background: var(--panel);
+  }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(15, 17, 21, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  nav.toc ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 13.5px; }
+  nav.toc a { color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+  nav.toc a:hover { color: var(--text); background: var(--panel-2); }
+
+  section { margin: 56px 0; }
+  h2 {
+    font-size: 26px; margin: 0 0 18px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.3px;
+  }
+  h2 .num { color: var(--accent); margin-right: 10px; font-weight: 600; font-size: 18px; }
+  h3 { font-size: 19px; margin: 28px 0 10px; color: var(--text); }
+  h4 { font-size: 16px; margin: 18px 0 8px; color: var(--accent-2); }
+  p { margin: 10px 0; color: #d4d8e1; }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; color: #d4d8e1; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+  .card.accent { border-left: 3px solid var(--accent); }
+  .card.good { border-left: 3px solid var(--good); }
+  .card.warn { border-left: 3px solid var(--warn); }
+  .card.bad { border-left: 3px solid var(--bad); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 760px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; margin: 14px 0;
+    font-size: 14.5px;
+  }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  th { background: var(--panel-2); color: var(--accent); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+  code {
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.92em;
+    background: var(--panel-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #f0c674;
+  }
+  pre code { background: transparent; padding: 0; color: #d4d8e1; }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 6px;
+          font-size: 12px; margin-right: 6px; }
+  .pill.good { background: rgba(74, 222, 128, 0.12); color: var(--good); }
+  .pill.warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+  .pill.bad  { background: rgba(248, 113, 113, 0.12); color: var(--bad); }
+  .pill.info { background: rgba(124, 196, 255, 0.12); color: var(--accent); }
+
+  blockquote {
+    border-left: 3px solid var(--accent-2);
+    padding: 8px 16px; margin: 14px 0;
+    background: var(--panel-2); border-radius: 0 8px 8px 0;
+    color: var(--muted);
+  }
+
+  .arch-diagram {
+    font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg); border: 1px solid var(--code-border);
+    border-radius: 10px; padding: 18px; white-space: pre;
+    font-size: 12.5px; line-height: 1.5; overflow-x: auto;
+    color: #d4d8e1;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+    margin-top: 64px;
+  }
+
+  .kbd {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    background: #20242f; border: 1px solid #2c3142; font-size: 12px;
+    font-family: "JetBrains Mono", monospace;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>LLM Wiki — 技術深度解析</h1>
+  <p class="subtitle">
+    一個會自我建構的個人知識庫：基於 Karpathy 的 LLM Wiki 模式，
+    以 Tauri + React 19 打造的跨平台桌面應用。本文件為繁體中文版深度技術剖析。
+  </p>
+  <div class="meta">
+    分析對象：<code>nashsu/llm_wiki</code> · v0.4.7 · GPL-3.0 授權
+  </div>
+  <div class="badges">
+    <span class="badge">Tauri v2 (Rust)</span>
+    <span class="badge">React 19 + TypeScript</span>
+    <span class="badge">LanceDB</span>
+    <span class="badge">sigma.js + graphology</span>
+    <span class="badge">Multi-LLM</span>
+    <span class="badge">Chrome Extension</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <ul>
+    <li><a href="#overview">專案概述</a></li>
+    <li><a href="#philosophy">核心理念</a></li>
+    <li><a href="#architecture">系統架構</a></li>
+    <li><a href="#features">主要功能</a></li>
+    <li><a href="#tech-detail">技術細節</a></li>
+    <li><a href="#strengths">優點</a></li>
+    <li><a href="#weaknesses">缺點</a></li>
+    <li><a href="#use-cases">使用場景</a></li>
+    <li><a href="#verdict">綜合評估</a></li>
+  </ul>
+</nav>
+
+<div class="container">
+
+<!-- ===================== 1. 專案概述 ===================== -->
+<section id="overview">
+  <h2><span class="num">01</span>專案概述</h2>
+  <p>
+    <strong>LLM Wiki</strong> 是一款跨平台桌面應用程式，旨在解決傳統 RAG（Retrieval-Augmented Generation）系統的根本性缺陷：
+    <em>知識不會累積</em>。傳統 RAG 在每次查詢時從原始文件重新檢索與組合答案，這意味著昂貴的推理成本被重複支付，
+    且文件之間的洞見從不會「沉澱」下來。
+  </p>
+  <p>
+    LLM Wiki 的解決方案是讓 LLM <strong>逐步建構並維護一個持久化、互相連結的 Markdown Wiki</strong>。
+    每當使用者匯入新文件，LLM 不只是把它索引起來，而是「閱讀 → 摘要 → 整合 → 更新交叉引用 → 標記矛盾 → 寫入紀錄」。
+    這份 Wiki 隨著時間推進不斷豐富，且因為儲存格式為純 Markdown，可以直接用 Obsidian 開啟瀏覽。
+  </p>
+
+  <div class="grid grid-3">
+    <div class="card accent">
+      <h4>定位</h4>
+      <p style="font-size:14px;">個人 / 研究 / 團隊知識庫構建工具，主打「LLM 維護、人類策展」的角色分工。</p>
+    </div>
+    <div class="card accent">
+      <h4>哲學基礎</h4>
+      <p style="font-size:14px;">源自 Andrej Karpathy 公開的 <code>llm-wiki.md</code> 抽象模式，本專案是其具體實作版本。</p>
+    </div>
+    <div class="card accent">
+      <h4>技術形態</h4>
+      <p style="font-size:14px;">Tauri 桌面 App + Chrome Extension + 本地 HTTP API（port 19827）+ 可選向量資料庫。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. 核心理念 ===================== -->
+<section id="philosophy">
+  <h2><span class="num">02</span>核心理念：為什麼 Wiki 而非 RAG？</h2>
+
+  <blockquote>
+    「Wiki 是一個持久、複利累積的成果。交叉引用已經就位、矛盾已被標註、綜合理解反映了你讀過的全部內容。
+    維護一個知識庫繁瑣的不是閱讀或思考，而是<strong>記帳</strong>──而 LLM 不會無聊。」
+    —— 改寫自 Karpathy 原文
+  </blockquote>
+
+  <h3>關鍵差異對比</h3>
+  <table>
+    <thead>
+      <tr><th>面向</th><th>傳統 RAG</th><th>LLM Wiki</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>知識成果</td><td>每次查詢時臨時組裝</td><td>持久化 Markdown 檔案，可被人類瀏覽</td></tr>
+      <tr><td>跨文件洞見</td><td>難以累積，每次重新發現</td><td>已預先寫入頁面，並透過 wikilink 互聯</td></tr>
+      <tr><td>矛盾偵測</td><td>無</td><td>Ingest 時主動標註，Lint 時系統化檢查</td></tr>
+      <tr><td>查詢成本</td><td>每次都需 embedding + LLM 重組</td><td>Wiki 已是現成知識，可直接讀取</td></tr>
+      <tr><td>使用者所有權</td><td>黑盒向量索引</td><td>純 Markdown，可用 git / Obsidian 操作</td></tr>
+      <tr><td>工程複雜度</td><td>低</td><td>較高（需設計 ingest / lint / link 整套邏輯）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>三層架構（Three-layer Architecture）</h3>
+  <div class="arch-diagram">┌──────────────────────────────────────────────────────────────┐
+│                   Schema Layer (規則)                         │
+│   purpose.md  +  schema.md  +  CLAUDE.md / AGENTS.md          │
+│   ── 定義 Wiki 的「為什麼」與「怎麼做」                         │
+└──────────────────────────────────────────────────────────────┘
+              ▲                                    │
+              │ LLM 讀取規則                        │ LLM 寫入頁面
+              │                                    ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   Wiki Layer (LLM 產出)                       │
+│   index.md  log.md  overview.md                               │
+│   entities/  concepts/  sources/  queries/  synthesis/        │
+│   ── 互相連結的 Markdown 知識網絡                              │
+└──────────────────────────────────────────────────────────────┘
+              ▲
+              │ LLM 讀取（從不修改）
+              │
+┌──────────────────────────────────────────────────────────────┐
+│                Raw Sources Layer (不可變)                     │
+│   raw/sources/  ──  PDF / DOCX / PPTX / MD / 網頁剪輯         │
+│   raw/assets/   ──  本地圖片                                  │
+└──────────────────────────────────────────────────────────────┘</div>
+
+  <h3>三個核心操作（Operations）</h3>
+  <ul>
+    <li><strong>Ingest（攝入）</strong> — 加入新來源，LLM 讀取、摘要、更新 entity / concept 頁、寫 log。</li>
+    <li><strong>Query（查詢）</strong> — 對 Wiki 提問，LLM 搜尋相關頁、合成答案，且<em>好答案可被存回 Wiki</em>。</li>
+    <li><strong>Lint（健檢）</strong> — 定期檢查矛盾、孤立頁、過時主張、缺少的概念頁等。</li>
+  </ul>
+</section>
+
+<!-- ===================== 3. 系統架構 ===================== -->
+<section id="architecture">
+  <h2><span class="num">03</span>系統架構與技術選型</h2>
+
+  <h3>整體架構圖</h3>
+  <div class="arch-diagram">┌────────────────────────────────────────────────────────────────────┐
+│  Chrome Extension (Manifest V3)                                     │
+│  ─ Readability.js + Turndown.js → 網頁 → Markdown                    │
+│  ─ POST → http://127.0.0.1:19827/clip  (local HTTP API)              │
+└──────────────────────────────┬─────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  Tauri Desktop App (Rust 後端  ⇄  React 19 前端)                     │
+│                                                                     │
+│  ┌── Frontend (TypeScript / Vite) ───────────────────────────────┐  │
+│  │  • shadcn/ui + Tailwind CSS v4                                │  │
+│  │  • Milkdown (ProseMirror) WYSIWYG 編輯                         │  │
+│  │  • sigma.js + graphology 知識圖譜視覺化                         │  │
+│  │  • Zustand 狀態管理（多個 store）                                │  │
+│  │  • react-i18next（中／英）                                      │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌── Rust Backend (src-tauri/) ────────────────────────────────────┐│
+│  │  • commands/fs.rs       檔案 I/O、文件預處理                    ││
+│  │  • commands/extract...  PDF / PPTX / DOCX 圖片抽取              ││
+│  │  • commands/vectorstore LanceDB 向量索引                        ││
+│  │  • commands/claude_cli  Claude Code CLI subprocess transport    ││
+│  │  • clip_server.rs       tiny_http: port 19827 接收瀏覽器剪輯     ││
+│  │  • proxy.rs             統一代理設定                             ││
+│  │  • panic_guard.rs       第三方解析器 panic → Result<E>           ││
+│  └────────────────────────────────────────────────────────────────┘│
+│                                                                     │
+│  ┌── Storage (本機檔案系統) ───────────────────────────────────────┐│
+│  │  專案目錄 = my-wiki/                                            ││
+│  │   ├ purpose.md / schema.md                                     ││
+│  │   ├ raw/sources, raw/assets                                    ││
+│  │   ├ wiki/ (entities, concepts, sources, queries, ...)          ││
+│  │   ├ .obsidian/  (Obsidian 設定)                                  ││
+│  │   └ .llm-wiki/ (App 設定、聊天紀錄、review 項目、向量資料庫)      ││
+│  └────────────────────────────────────────────────────────────────┘│
+└────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────────────┐
+│  外部 LLM / 服務（streaming fetch）                                  │
+│  OpenAI · Anthropic · Google · Ollama · Custom · Tavily(web search) │
+└────────────────────────────────────────────────────────────────────┘</div>
+
+  <h3>技術棧一覽</h3>
+  <table>
+    <thead><tr><th>層級</th><th>技術</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td>桌面框架</td><td>Tauri v2</td><td>Rust 後端 + WebView 前端，二進位輕量、安全模型強</td></tr>
+      <tr><td>前端</td><td>React 19 + Vite + TypeScript</td><td>使用最新 React 19，配合 Vite 8</td></tr>
+      <tr><td>UI 系統</td><td>shadcn/ui + Tailwind CSS v4</td><td>無 runtime CSS-in-JS 開銷</td></tr>
+      <tr><td>狀態管理</td><td>Zustand 5</td><td>多個獨立 store（chat / wiki / review / activity / research / update）</td></tr>
+      <tr><td>編輯器</td><td>Milkdown 7 (ProseMirror)</td><td>支援 math plugin，WYSIWYG Markdown</td></tr>
+      <tr><td>圖譜</td><td>sigma.js 3 + graphology + ForceAtlas2</td><td>WebGL 渲染，含 Louvain 社群偵測</td></tr>
+      <tr><td>數學</td><td>KaTeX + remark-math + rehype-katex</td><td>含 100+ Unicode fallback</td></tr>
+      <tr><td>圖表</td><td>Mermaid 11</td><td>內建 mermaid-diagram 元件</td></tr>
+      <tr><td>向量資料庫</td><td>LanceDB 0.27（Rust 嵌入）</td><td>可選；本機 ANN 檢索</td></tr>
+      <tr><td>文件解析</td><td>pdfium-render / docx-rs / calamine / zip</td><td>原生 Rust 解析，PDF 含圖片抽取</td></tr>
+      <tr><td>HTTP / CLI</td><td>tiny_http + tokio::process + which</td><td>本機 API + Claude Code CLI 子行程</td></tr>
+      <tr><td>i18n</td><td>react-i18next + i18next 26</td><td>中文 / 英文</td></tr>
+      <tr><td>測試</td><td>Vitest 4 + fast-check</td><td>含 property-based 測試與 real-LLM 測試分流</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ===================== 4. 主要功能 ===================== -->
+<section id="features">
+  <h2><span class="num">04</span>主要功能特色（相對 Karpathy 原模式的擴充）</h2>
+
+  <p>原模式僅是一份抽象設計文件，本專案在此之上實作了 18+ 項具體擴充：</p>
+
+  <div class="grid grid-2">
+    <div class="card good">
+      <h4>① 兩階段思維鏈 Ingest</h4>
+      <p>原模式為單步攝入；本專案拆為「分析」與「生成」兩次 LLM 呼叫，提升品質：
+      第一次抽取實體 / 概念 / 矛盾，第二次據此產生 Wiki 頁面、index、log、review 項。</p>
+    </div>
+    <div class="card good">
+      <h4>② SHA256 增量快取</h4>
+      <p>來源檔案內容於攝入前計算雜湊，未變動的檔案自動跳過，節省 token 與時間。</p>
+    </div>
+    <div class="card good">
+      <h4>③ 持久化 Ingest 佇列</h4>
+      <p>序列處理避免並發呼叫，佇列存於磁碟、重啟可續，失敗自動重試最多 3 次。</p>
+    </div>
+    <div class="card good">
+      <h4>④ 多模態圖片攝入</h4>
+      <p>從 PDF / PPTX / DOCX 抽出嵌入圖片，以 Vision LLM 產生事實性描述（caption），
+      供圖片感知搜尋與 lightbox 預覽。</p>
+    </div>
+    <div class="card good">
+      <h4>⑤ 4 訊號相關性模型</h4>
+      <p>知識圖譜邊權重綜合：直接連結 ×3、來源重疊 ×4、Adamic-Adar ×1.5、型別親和 ×1.0。</p>
+    </div>
+    <div class="card good">
+      <h4>⑥ Louvain 社群偵測</h4>
+      <p>自動發掘知識叢集，含內聚度評分（&lt;0.15 警告）、12 色配色、社群圖例。</p>
+    </div>
+    <div class="card good">
+      <h4>⑦ Graph Insights</h4>
+      <p>自動偵測「驚奇連結」、「孤立頁面」、「橋接節點」三類洞見，
+      可一鍵觸發 LLM 優化的 Deep Research。</p>
+    </div>
+    <div class="card good">
+      <h4>⑧ 多階段檢索管線</h4>
+      <p>Tokenized 搜尋 → 可選向量搜尋（LanceDB）→ 圖譜擴展 → token 預算分配。
+      實測加上向量搜尋後 recall 從 58.2% → 71.4%。</p>
+    </div>
+    <div class="card good">
+      <h4>⑨ 多會話聊天</h4>
+      <p>獨立 session、對話側邊欄、可配置歷史深度、引用清單可摺疊、可一鍵 Regenerate、答案可存回 Wiki。</p>
+    </div>
+    <div class="card good">
+      <h4>⑩ Thinking 顯示</h4>
+      <p>對於發送 <code>&lt;think&gt;</code> 的模型（DeepSeek、QwQ）以滾動 5 行樣式呈現，
+      生成完成後可摺疊。</p>
+    </div>
+    <div class="card good">
+      <h4>⑪ KaTeX 數學渲染</h4>
+      <p>支援 inline / block，並自動為赤裸的 <code>\begin{aligned}</code> 包上 <code>$$</code>，含 100+ Unicode fallback。</p>
+    </div>
+    <div class="card good">
+      <h4>⑫ 非同步 Review 系統</h4>
+      <p>LLM 攝入時標記「需要人類判斷」項目，動作受限為 Create Page / Deep Research / Skip，
+      預先生成搜尋查詢字串。</p>
+    </div>
+    <div class="card good">
+      <h4>⑬ Deep Research</h4>
+      <p>Tavily 多查詢網路搜尋 + 全文擷取（不截斷）→ LLM 合成 → 自動 ingest。
+      最多 3 個並發任務，附專屬側邊面板。</p>
+    </div>
+    <div class="card good">
+      <h4>⑭ Chrome Web Clipper</h4>
+      <p>Manifest V3、Mozilla Readability + Turndown，本機 HTTP API 通信，
+      app 不在線時可離線預覽，每 3 秒輪詢處理。</p>
+    </div>
+    <div class="card good">
+      <h4>⑮ 多格式解析</h4>
+      <p>PDF / DOCX / PPTX / XLSX / 圖片 / 影音皆有專屬處理路徑，產出結構化 Markdown。</p>
+    </div>
+    <div class="card good">
+      <h4>⑯ 串聯刪除</h4>
+      <p>刪除來源時用 3 種方法（frontmatter sources、來源摘要頁名、區段引用）找關聯頁，
+      共享實體頁僅移除該來源、不整頁刪除，並清理失效 wikilink 與 index。</p>
+    </div>
+    <div class="card good">
+      <h4>⑰ 跨平台一致性</h4>
+      <p>22+ 檔共用 <code>normalizePath()</code>、Unicode-safe 字元切片防 CJK 檔名崩潰、
+      macOS close-to-hide、Windows/Linux 退出確認。</p>
+    </div>
+    <div class="card good">
+      <h4>⑱ 多 LLM 提供者</h4>
+      <p>OpenAI / Anthropic / Google / Ollama / Custom 各有 streaming 與 header 的差異化處理，
+      可獨立配置 embedding 端點。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5. 技術細節 ===================== -->
+<section id="tech-detail">
+  <h2><span class="num">05</span>技術細節深入剖析</h2>
+
+  <h3>5.1 兩階段 Ingest 管線</h3>
+  <pre><code>Step 1（分析）：LLM 讀取來源 → 結構化分析
+  - 關鍵實體、概念、論點
+  - 與既有 Wiki 內容的連結
+  - 與既有知識的矛盾與張力
+  - 對 Wiki 結構的建議
+
+Step 2（生成）：LLM 接收分析 → 產生 Wiki 檔案
+  - 來源摘要頁（含 frontmatter: type, title, sources[]）
+  - Entity / Concept 頁與交叉引用
+  - 更新 index.md, log.md, overview.md
+  - Review 項目（給人類判斷）
+  - Deep Research 用搜尋查詢字串</code></pre>
+  <p>
+    程式碼位於 <code>src/lib/ingest.ts</code>（1614 行）。設計上將「理解」與「寫作」拆開，
+    避免單次呼叫同時兼顧分析品質與輸出格式所造成的劣化，並讓中間結果易於除錯與快取。
+  </p>
+
+  <h3>5.2 4 訊號相關性模型（Knowledge Graph）</h3>
+  <table>
+    <thead><tr><th>訊號</th><th>權重</th><th>意義</th></tr></thead>
+    <tbody>
+      <tr><td>Direct link（直接 wikilink）</td><td>×3.0</td><td>頁面間透過 <code>[[wikilink]]</code> 直接連結</td></tr>
+      <tr><td>Source overlap（來源重疊）</td><td>×4.0</td><td>共享相同 raw 來源（最強訊號 — 共出處最能反映關係）</td></tr>
+      <tr><td>Adamic-Adar</td><td>×1.5</td><td>共同鄰居數，按鄰居度數倒數加權</td></tr>
+      <tr><td>Type affinity（型別親和）</td><td>×1.0</td><td>同型別頁加成（entity↔entity 等）</td></tr>
+    </tbody>
+  </table>
+  <p>位於 <code>src/lib/graph-relevance.ts</code>（312 行）。視覺化使用 sigma.js + ForceAtlas2，
+     具備位置快取避免資料變動時版面跳動。</p>
+
+  <h3>5.3 多階段檢索管線</h3>
+  <pre><code>Phase 1：Tokenized 搜尋
+  - 英文：分詞 + 停用字
+  - 中文：CJK bigram（每个 → [每个, 个…]）
+  - 標題命中加成 +10
+  - 同時搜尋 wiki/ 與 raw/sources/
+
+Phase 1.5：向量語意搜尋（可選）
+  - 透過任意 OpenAI 相容 /v1/embeddings 端點
+  - 儲存於 LanceDB（Rust 後端）做 ANN 檢索
+  - 用餘弦相似度，可發現關鍵字無交集但語意相關的頁
+  - 結果與 tokenized 搜尋合併（已存在加成、新發現添加）
+
+Phase 2：圖譜擴展
+  - 取頂端搜尋結果為種子
+  - 用 4 訊號相關性找關聯頁
+  - 2-hop 衰減
+
+Phase 3：預算控制
+  - context window 4K → 1M tokens 可調
+  - 比例分配：60% wiki / 20% chat 歷史 / 5% index / 15% system
+  - 頁面以 search + graph 綜合分排序
+
+Phase 4：上下文組裝
+  - 編號頁全文（不只摘要）
+  - System prompt 含 purpose.md / 語言規則 / 引用格式 / index.md
+  - 指示 LLM 以 [1], [2] 形式引用</code></pre>
+
+  <h3>5.4 Rust 後端關鍵模組</h3>
+  <ul>
+    <li><code>src-tauri/src/commands/fs.rs</code> — 統一的 <code>preprocess_file</code>：依副檔名分派到 PDF / DOCX / PPTX / XLSX 解析。</li>
+    <li><code>src-tauri/src/commands/extract_images.rs</code> — 利用 pdfium <code>page.objects()</code> 抽取 <code>PdfPageObjectType::Image</code>，PPTX/DOCX 直接讀 zip 內 <code>media/</code>。</li>
+    <li><code>src-tauri/src/commands/vectorstore.rs</code> — LanceDB 介面（<code>vector_upsert_chunks</code> 等）。</li>
+    <li><code>src-tauri/src/commands/claude_cli.rs</code> — 用 <code>tokio::process</code> 啟動 <code>claude</code> 子行程，stdout 逐行串回前端。</li>
+    <li><code>src-tauri/src/clip_server.rs</code> — <code>tiny_http</code> 起 port 19827，接 Chrome Extension 的剪輯 POST。</li>
+    <li><code>src-tauri/src/panic_guard.rs</code> — 第三方解析器發生 panic 時於 Tauri command 邊界轉成 <code>Result&lt;Error&gt;</code>，避免單檔毀掉整個 App（搭配 <code>panic = "unwind"</code>）。</li>
+  </ul>
+
+  <h3>5.5 測試策略</h3>
+  <p>專案測試覆蓋面相當紮實，從目錄結構可見：</p>
+  <ul>
+    <li><strong>單元測試</strong>：<code>*.test.ts</code>（搜尋、tokenize、frontmatter、wikilink、merge、cleanup 等核心邏輯）</li>
+    <li><strong>Property-based 測試</strong>：<code>*.property.test.ts</code> 用 fast-check 自動產生輸入（detect-language、path-utils、review-utils、sweep-reviews）</li>
+    <li><strong>情境測試</strong>：<code>*.scenarios.test.ts</code>（lint、ingest、enrich-wikilinks、search、sweep）</li>
+    <li><strong>真實 LLM 測試</strong>：<code>*.real-llm.test.ts</code> 透過 <code>npm run test:llm</code> 單獨跑，<code>--no-file-parallelism</code> 避免速率限制</li>
+    <li><strong>整合測試</strong>：<code>*.integration.test.ts</code>（ingest-queue、persist）</li>
+    <li><strong>競態測試</strong>：<code>sweep-reviews.race.test.ts</code></li>
+  </ul>
+
+  <h3>5.6 跨平台與穩健性處理</h3>
+  <ul>
+    <li><strong>路徑統一</strong>：<code>normalizePath()</code> 在 22+ 檔被使用，全部反斜線→正斜線</li>
+    <li><strong>Unicode 安全</strong>：字元級切片避免 CJK 檔名因 byte boundary 切到一半而崩潰</li>
+    <li><strong>專案互斥鎖</strong>：<code>project-mutex.ts</code> 防止多個視窗同時操作同一 Wiki</li>
+    <li><strong>15 分鐘 timeout</strong>：長 ingest 不會被預設逾時殺掉</li>
+    <li><strong>dataVersion 訊號</strong>：Wiki 內容變動時自動觸發 graph 與 UI 重新整理</li>
+    <li><strong>Release 設定</strong>：<code>codegen-units = 1</code>、<code>lto = true</code>、<code>opt-level = "s"</code>、<code>panic = "unwind"</code> 兼顧大小、速度與容錯</li>
+  </ul>
+</section>
+
+<!-- ===================== 6. 優點 ===================== -->
+<section id="strengths">
+  <h2><span class="num">06</span>優點 <span class="pill good">PROS</span></h2>
+
+  <div class="grid grid-2">
+    <div class="card good">
+      <h4>架構清晰且哲學一致</h4>
+      <p>三層架構（Sources / Wiki / Schema）+ 三操作（Ingest / Query / Lint）邏輯純粹，
+      實作完整呼應 Karpathy 模式，沒有偏離核心理念。</p>
+    </div>
+    <div class="card good">
+      <h4>儲存格式即所見即所有權</h4>
+      <p>所有資料都是純 Markdown 檔，可被 git 版本控制、Obsidian 直接開啟，
+      使用者完全擁有資料、無 vendor lock-in。</p>
+    </div>
+    <div class="card good">
+      <h4>Rust + Tauri 帶來輕量安全</h4>
+      <p>相較 Electron，二進位體積更小、記憶體占用低、安全模型基於 capabilities。
+      實際 release 設定（LTO、opt-level=s、strip）也顯示作者注重 binary 大小。</p>
+    </div>
+    <div class="card good">
+      <h4>多階段檢索 + 可選向量</h4>
+      <p>「Tokenized 為主、向量為輔」的策略很務實：
+      小規模 wiki 用 token 即可，避免維護向量索引；規模大了再開向量提升 recall（58.2% → 71.4% 為實測數字）。</p>
+    </div>
+    <div class="card good">
+      <h4>多 LLM 抽象做得乾淨</h4>
+      <p>OpenAI / Anthropic / Google / Ollama / Claude Code CLI 各自的 streaming 差異被封裝在 <code>llm-providers.ts</code>，
+      還支援自訂 OpenAI 相容端點與獨立 embedding 設定。</p>
+    </div>
+    <div class="card good">
+      <h4>測試文化紮實</h4>
+      <p>不只單元測試，還有 property-based、scenarios、integration、race、real-LLM 多層次。
+      <code>real-llm</code> 與 mock 測試分流（<code>npm run test:mocks</code> / <code>npm run test:llm</code>）反映成熟度。</p>
+    </div>
+    <div class="card good">
+      <h4>知識圖譜不只是視覺玩具</h4>
+      <p>4 訊號相關性模型 + Louvain 社群偵測 + 內聚度評分 + Graph Insights，
+      把圖譜真正用於「發現孤立頁、橋接節點、缺漏」並接上 Deep Research。</p>
+    </div>
+    <div class="card good">
+      <h4>人在迴路設計合理</h4>
+      <p>Async Review 系統把「LLM 自動做」與「需要人類判斷」清楚分離，
+      動作受限為 3 種（Create Page / Deep Research / Skip）防止 LLM 幻想出任意行為。</p>
+    </div>
+    <div class="card good">
+      <h4>多模態與多格式支援</h4>
+      <p>不只是「PDF 抽文字」，而是針對 DOCX / PPTX / XLSX 各自走結構化路徑（保留標題、表格、列表），
+      PDF 還抽圖 + Vision caption，整合進統一搜尋。</p>
+    </div>
+    <div class="card good">
+      <h4>細節打磨</h4>
+      <p>SHA256 增量快取、佇列重啟可續、Unicode-safe 路徑、panic guard、project mutex、
+      15 分鐘 timeout、Obsidian 設定自動產生……反映了作者長期實際使用而磨出的細節。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 7. 缺點 ===================== -->
+<section id="weaknesses">
+  <h2><span class="num">07</span>缺點與潛在風險 <span class="pill bad">CONS</span></h2>
+
+  <div class="grid grid-2">
+    <div class="card bad">
+      <h4>LLM 成本與速度</h4>
+      <p>兩階段攝入需要兩次 LLM 呼叫，加上 overview.md 每次自動更新、Vision caption、可選 embedding，
+      重度使用下 token 成本不可忽視。雖有 SHA256 快取，第一次 ingest 仍是純成本。</p>
+    </div>
+    <div class="card bad">
+      <h4>Wiki 漂移（drift）風險</h4>
+      <p>LLM 寫的頁面隨時間累積有可能風格不一、命名不統一、概念合併不徹底。
+      雖有 Lint 機制，但仍依賴使用者主動觸發、判讀建議。</p>
+    </div>
+    <div class="card bad">
+      <h4>規模上限不明</h4>
+      <p>原模式作者建議 ~100 來源、數百頁面這個量級。當頁面達數千時，index.md 本身會變大、
+      圖譜效能、Louvain 計算時間、token 預算分配都會受壓。專案未明確標明效能曲線。</p>
+    </div>
+    <div class="card bad">
+      <h4>錯誤的「事實」會被寫入</h4>
+      <p>LLM 攝入若誤讀來源（如表格抽取錯位、PDF OCR 雜訊、圖片 caption 不準），錯誤會寫入 Wiki 並透過 wikilink 擴散。
+      要靠 review + lint 補救，但人類負擔仍存在。</p>
+    </div>
+    <div class="card bad">
+      <h4>並發限制</h4>
+      <p>Ingest 佇列為序列處理（為了避免 race condition 與提供穩定的 wiki 寫入），
+      面對大量文件批次匯入時很慢。Deep Research 雖有並發 3 個但仍是少量。</p>
+    </div>
+    <div class="card bad">
+      <h4>跨來源重複資訊整合困難</h4>
+      <p>同一個實體被 5 篇文章提及時，要不要合併、如何 reconcile 衝突，這類「真正困難」的整合工作仍高度依賴 LLM 判斷與 prompt 工程。從程式碼可見有 page-merge 邏輯但複雜度天花板存在。</p>
+    </div>
+    <div class="card bad">
+      <h4>Chrome Extension 安全面</h4>
+      <p>本機 HTTP API（port 19827）對 <code>http://127.0.0.1</code> 開放、無認證機制（從 manifest 看）。
+      對單機個人使用問題不大，但若多使用者環境（例如共用機器、或惡意本機程式）會有未授權剪輯的風險。</p>
+    </div>
+    <div class="card bad">
+      <h4>對 LLM 提供者高度耦合</h4>
+      <p>雖有抽象，但 streaming 格式差異仍須各自處理。LLM API 介面演化（如 Anthropic 工具呼叫格式變更）會直接造成維護負擔。</p>
+    </div>
+    <div class="card bad">
+      <h4>離線可用性受限</h4>
+      <p>核心功能（ingest / query / research）皆依賴外部 LLM。雖支援 Ollama，
+      但本機模型品質與 token 上下文容量通常難以匹敵 GPT-4o / Claude Opus / Gemini，產出 wiki 品質會明顯下降。</p>
+    </div>
+    <div class="card bad">
+      <h4>學習曲線</h4>
+      <p>使用者需理解 purpose.md / schema.md / index.md / log.md 各自角色才能發揮最大價值。
+      18+ 項功能（review、deep research、graph insights、lint…）對初學者門檻偏高。</p>
+    </div>
+    <div class="card bad">
+      <h4>GPL-3.0 授權限制</h4>
+      <p>採 GPL-3.0，商業環境內嵌或衍生作品需 open source。對企業內部工具可接受，
+      但對 SaaS 嵌入或商業產品需謹慎評估法律風險。</p>
+    </div>
+    <div class="card bad">
+      <h4>缺乏多人協作</h4>
+      <p>專案模型為「個人 / 單機」。雖然 wiki 是 git 友善的 markdown，但 review queue、ingest queue、
+      聊天紀錄都儲存在本機 <code>.llm-wiki/</code>，多人協作需自行設計同步機制。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 8. 使用場景 ===================== -->
+<section id="use-cases">
+  <h2><span class="num">08</span>適用與不適用場景</h2>
+
+  <div class="grid grid-2">
+    <div class="card good">
+      <h4>✅ 高度適合</h4>
+      <ul>
+        <li><strong>研究員</strong>長期深耕單一主題，每週讀數篇 paper / report</li>
+        <li><strong>顧問 / 分析師</strong>整理多個產業 / 客戶的競品資訊</li>
+        <li><strong>讀書人</strong>建立個人圖書館的章節 / 角色 / 主題 wiki</li>
+        <li><strong>創作者</strong>累積寫作素材、人物設定、世界觀</li>
+        <li><strong>學生</strong>整合課堂筆記 + 教科書 + 期刊文章</li>
+        <li><strong>個人成長</strong>追蹤目標、心理、健康；filing 日記、podcast 筆記</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <h4>❌ 不適合</h4>
+      <ul>
+        <li><strong>大型團隊知識庫</strong>（缺多人協作、權限模型）</li>
+        <li><strong>結構化資料分析</strong>（這是文字導向工具，非 BI）</li>
+        <li><strong>對話式客服</strong>（這是長期累積工具，非即時 QA 系統）</li>
+        <li><strong>預算極度敏感</strong>（每次 ingest 兩次 LLM 呼叫成本可觀）</li>
+        <li><strong>純離線無 GPU</strong>（本機 LLM 品質有限）</li>
+        <li><strong>需 SLA / 高可用</strong>（單機桌面應用、無服務化選項）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 9. 綜合評估 ===================== -->
+<section id="verdict">
+  <h2><span class="num">09</span>綜合評估與建議</h2>
+
+  <div class="card accent">
+    <h3 style="margin-top:0;">專案成熟度評分</h3>
+    <table>
+      <thead><tr><th>面向</th><th>評分</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td>理念清晰度</td><td><span class="pill good">A+</span></td><td>核心哲學明確、與原模式高度一致</td></tr>
+        <tr><td>技術選型</td><td><span class="pill good">A</span></td><td>Tauri / React 19 / Rust 解析器都是合理且現代的選擇</td></tr>
+        <tr><td>程式碼品質</td><td><span class="pill good">A-</span></td><td>測試多層次、模組劃分清晰、命名一致</td></tr>
+        <tr><td>功能完整度</td><td><span class="pill good">A</span></td><td>18+ 擴充涵蓋 ingest / search / graph / web / extension</td></tr>
+        <tr><td>使用者體驗</td><td><span class="pill warn">B+</span></td><td>功能多但學習曲線存在；i18n 與 scenario 模板有助於上手</td></tr>
+        <tr><td>擴充性</td><td><span class="pill warn">B</span></td><td>單機 / 個人為主，多人 / 服務化非設計目標</td></tr>
+        <tr><td>商業可用性</td><td><span class="pill warn">B-</span></td><td>GPL-3.0 限制企業整合彈性</td></tr>
+        <tr><td>長期維運成本</td><td><span class="pill warn">B</span></td><td>LLM 成本 + drift 風險 + 多 provider 維護壓力</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>給不同讀者的建議</h3>
+  <div class="card">
+    <h4>🧑‍🔬 給研究者 / 重度知識工作者</h4>
+    <p>強烈推薦試用。即使最終你決定建立自己的工作流，這個專案展示的「兩階段 ingest」、
+    「4 訊號相關性」、「graph insights → deep research」幾個設計都值得學習與借鑑。</p>
+  </div>
+  <div class="card">
+    <h4>🛠 給開發者 / 想參考實作</h4>
+    <p>此 repo 是學習以下實踐的優秀範例：</p>
+    <ul>
+      <li>Tauri v2 後端如何整合多個 Rust 文件解析庫並提供 panic-safe 邊界</li>
+      <li>多 LLM provider 抽象（streaming + headers）的乾淨設計</li>
+      <li>property-based + real-llm 測試分流的成熟方案</li>
+      <li>本機 HTTP API 與 browser extension 之間的最小化通訊</li>
+      <li>圖譜分析（graphology + Louvain + Adamic-Adar）如何被實際應用而非裝飾</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>🏢 給企業評估</h4>
+    <p>三個關鍵問題：</p>
+    <ol>
+      <li><strong>授權</strong>：GPL-3.0 是否與貴公司商業模式相容？</li>
+      <li><strong>多人協作</strong>：是否能接受「每個使用者一個本機 wiki，靠 git 同步」？</li>
+      <li><strong>成本控制</strong>：是否能透過自架 Ollama / Claude Code CLI 等本地路線降低 token 成本？</li>
+    </ol>
+    <p>若三題皆可接受，這是一個不錯的內部知識管理工具起點。</p>
+  </div>
+
+  <h3>結論</h3>
+  <div class="card accent">
+    <p>
+      LLM Wiki 是 Karpathy 抽象設計模式的<strong>高品質具象實作</strong>，
+      在「LLM 維護持久化 markdown 知識庫」這個賽道上做得相當完整。其價值不在於每一項功能多新穎，
+      而在於把 ingest / search / graph / review / clipper / multi-provider / cross-platform 這些零碎需求
+      <strong>整合成一個內聚的桌面應用</strong>，並用 Markdown 開放格式保證使用者對資料的所有權。
+    </p>
+    <p>
+      最大的價值定位是<strong>個人重度知識工作者的長期助手</strong>──那種需要花數月深耕一個主題、
+      讀大量資料、累積結構化理解的場景。對這類使用者而言，付出 LLM 成本換取「自我建構的 Wiki」是合理交易。
+    </p>
+    <p>
+      最大的隱憂則是<strong>長期內容品質的漂移</strong>與<strong>規模上限的不確定性</strong>。
+      建議使用者建立定期 Lint + 人工抽查的習慣，並在 wiki 達到數百頁時主動評估是否需要拆分專案。
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p>分析對象：<code>nashsu/llm_wiki</code> v0.4.7 · GPL-3.0</p>
+  <p>本文件為繁體中文技術深度解析 · 由 Claude 於 2026-05-11 產出</p>
+  <p>原始碼：<a href="https://github.com/nashsu/llm_wiki" target="_blank" rel="noopener">github.com/nashsu/llm_wiki</a></p>
+</footer>
+
+</div>
+</body>
+</html>
