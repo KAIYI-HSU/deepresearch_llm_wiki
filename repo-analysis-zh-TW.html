@@ -205,6 +205,7 @@
     <li><a href="#architecture">系統架構</a></li>
     <li><a href="#features">主要功能</a></li>
     <li><a href="#tech-detail">技術細節</a></li>
+    <li><a href="#deep-research">Deep Research 生命週期</a></li>
     <li><a href="#strengths">優點</a></li>
     <li><a href="#weaknesses">缺點</a></li>
     <li><a href="#use-cases">使用場景</a></li>
@@ -577,6 +578,433 @@ Phase 4：上下文組裝
     <li><strong>dataVersion 訊號</strong>：Wiki 內容變動時自動觸發 graph 與 UI 重新整理</li>
     <li><strong>Release 設定</strong>：<code>codegen-units = 1</code>、<code>lto = true</code>、<code>opt-level = "s"</code>、<code>panic = "unwind"</code> 兼顧大小、速度與容錯</li>
   </ul>
+</section>
+
+<!-- ===================== 5.5 Deep Research 生命週期 ===================== -->
+<section id="deep-research">
+  <h2><span class="num">5.5</span>Deep Research 完整生命週期深度解析</h2>
+
+  <p>
+    本節獨立探討這份 repo 最具特色的設計之一：<strong>從 Graph Insights 自動觸發 Deep Research</strong> 的完整流程。
+    這條路徑橫跨「圖譜結構分析 → 主題優化 → 多查詢網路搜尋 → LLM 合成 → 自動 ingest 回 Wiki」共 8 個階段，
+    並與業界主流 Deep Research 產品（OpenAI、Perplexity、Gemini DR）形成顯著差異。
+  </p>
+
+  <h3>5.5.1 八階段生命週期總覽</h3>
+  <pre class="arch-diagram">┌────────────────────────────────────────────────────────────────────────┐
+│  ① 圖譜結構分析（純前端、無 LLM 呼叫）                                   │
+│     graph-insights.ts                                                  │
+│     ├ findSurprisingConnections()  跨社群 / 跨型別 / 邊緣-中樞耦合      │
+│     └ detectKnowledgeGaps()        孤立節點 / 稀疏社群 / 橋接節點       │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │ 使用者於 UI 點擊 [Deep Research]
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ② 主題優化（一次 LLM 呼叫，stream）                                     │
+│     optimize-research-topic.ts                                         │
+│     讀取  ↳ purpose.md（Wiki 目的）                                     │
+│           ↳ overview.md（Wiki 現況）                                    │
+│     輸出  ↳ TOPIC: 一句精準研究問題                                      │
+│           ↳ QUERY × 3：搜尋引擎友善的關鍵字串                            │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ③ 使用者確認對話框（可編輯）                                            │
+│     graph-view.tsx setResearchDialog(...)                              │
+│     ─ 使用者可調整 topic 與 3 個 queries                                 │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │ 確認 → queueResearch()
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ④ 任務佇列（最多 3 個並發）                                             │
+│     research-store.ts (Zustand)                                        │
+│     status:  queued → searching → synthesizing → saving → done         │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⑤ 多查詢網路搜尋（串列、URL 去重）                                       │
+│     deep-research.ts → web-search.ts                                   │
+│     for query of queries:                                              │
+│       results = await tavilySearch(q, 5)   // 或 SerpApi               │
+│       allResults.push(...dedupBy(url))                                 │
+│     Tavily 參數: search_depth: "advanced", include_answer: false       │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⑥ LLM 合成（一次 stream，搭配 wiki/index.md 上下文）                    │
+│     systemPrompt 含 4 大規則：                                          │
+│       ─ 對既有實體用 [[wikilink]] 連結                                   │
+│       ─ 引用網路來源用 [N] 標記                                          │
+│       ─ 註記矛盾與缺口                                                  │
+│       ─ 中立百科式語氣                                                  │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⑦ 寫入 Wiki                                                            │
+│     wiki/queries/research-&lt;slug&gt;-&lt;date&gt;.md                            │
+│     frontmatter: type=query, origin=deep-research, tags=[research]      │
+│     去除 &lt;think&gt; 區塊 + 附 References 章節                              │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⑧ 自動 Ingest 回 Wiki（觸發兩階段攝入管線）                              │
+│     autoIngest(projectPath, savedPath, llmConfig)                      │
+│     ─ Step 1 分析 → 抽取實體 / 概念 / 矛盾                                │
+│     ─ Step 2 生成 → 建立 entity / concept 頁 + 更新 index / log / overview │
+│     ─ 共 2 次額外 LLM 呼叫，結果整合進知識圖譜                            │
+└────────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+                       <strong>知識圖譜更新</strong> → 觸發下一輪 Insights</pre>
+
+  <h3>5.5.2 階段細節剖析</h3>
+
+  <h4>階段 ① 圖譜結構分析（觸發點）</h4>
+  <p>
+    與市面上 Deep Research 不同，這裡的<strong>觸發來源不是使用者的疑問</strong>，而是
+    <code>graph-insights.ts</code> 對知識圖譜的拓樸分析結果。系統會列出三類 Gap：
+  </p>
+  <table>
+    <thead><tr><th>類別</th><th>條件</th><th>建議</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>孤立節點 (isolated-node)</td>
+        <td><code>linkCount ≤ 1</code>，排除 overview/index/log</td>
+        <td>「這些頁面缺乏連結，考慮補 wikilink 或研究擴充」</td>
+      </tr>
+      <tr>
+        <td>稀疏社群 (sparse-community)</td>
+        <td>Louvain 社群 <code>cohesion &lt; 0.15</code> 且 ≥ 3 節點</td>
+        <td>「此知識區塊內部交叉引用稀薄，研究以補洞」</td>
+      </tr>
+      <tr>
+        <td>橋接節點 (bridge-node)</td>
+        <td>單一節點連通 ≥ 3 個不同社群</td>
+        <td>「關鍵連接點若內容單薄會削弱整個 Wiki」</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    這是個關鍵設計：研究主題的「發現」交給<strong>圖論演算法</strong>而非使用者，
+    讓 LLM 主動指出「你的知識網路哪裡有破洞」。
+  </p>
+
+  <h4>階段 ② 主題優化（context-aware）</h4>
+  <p>
+    使用者點 Deep Research 後，並非直接搜尋圖譜給的 raw description，而是先請 LLM 將其精煉。
+    這是<code>optimize-research-topic.ts</code> 的工作：
+  </p>
+  <pre><code>輸入：gapTitle + gapDescription + gapType
+      + purpose.md（Wiki 為何而生）
+      + overview.md（Wiki 目前涵蓋什麼）
+
+輸出（嚴格 4 行格式）：
+  TOPIC: &lt;一句精準研究問題，使用使用者語言&gt;
+  QUERY: &lt;查詢 1，可用英文關鍵字以符合搜尋引擎&gt;
+  QUERY: &lt;查詢 2&gt;
+  QUERY: &lt;查詢 3&gt;</code></pre>
+  <p>
+    重點：<strong>topic 與 query 語言可不同</strong>──topic 跟隨使用者語言（中文 wiki 用中文 topic），
+    但 query 可使用英文關鍵字以最大化搜尋引擎 recall。這個設計反映了實務上中文用戶常見的痛點：
+    AI 直接用中文搜尋常會搜不到英文技術內容。
+  </p>
+
+  <h4>階段 ③ 可編輯確認對話框</h4>
+  <p>
+    優化後的 topic + queries 會塞進<strong>可編輯</strong>的 dialog（不是直接執行）。
+    使用者可微調 topic 文字、調整 / 刪除 / 替換 3 個查詢。
+    這是「人在迴路」（HITL）的關鍵閘門，避免 LLM 把研究方向理解錯後直接燒掉 API 額度。
+  </p>
+
+  <h4>階段 ④ 佇列（concurrent = 3）</h4>
+  <p>
+    任務經 <code>queueResearch()</code> 進入 Zustand store。<code>maxConcurrent = 3</code>
+    硬編碼上限──不是隨意決定，是因為下游 ⑥ 的 LLM 合成每個任務都會吃一個 stream connection，
+    多開易踩到 provider rate limit。狀態機如下：
+  </p>
+  <pre><code>queued → searching → synthesizing → saving → done
+                                              ↘ error</code></pre>
+
+  <h4>階段 ⑤ 多查詢網路搜尋</h4>
+  <p>
+    對每個 query 呼叫 <code>tavilySearch()</code>（或 SerpApi），各取 5 筆，<strong>以 URL 去重</strong>合併。
+    Tavily 端點呼叫使用 <code>search_depth: "advanced"</code> 取得較深入內容、<code>include_answer: false</code>
+    避免 Tavily 自己先給一個簡答（因為合成工作要交給後續 LLM）。
+  </p>
+  <p>
+    特別注意：HTTP 走 <strong>Tauri HTTP plugin</strong> 而非瀏覽器 fetch，避免 CORS 限制；
+    且為了將來換 Serper/Exa/Brave 不必各自處理跨域問題。
+  </p>
+
+  <h4>階段 ⑥ LLM 合成（含 wiki 交叉引用）</h4>
+  <p>
+    這是整個流程最關鍵的環節。<code>system prompt</code> 不僅要求合成，更強制要求：
+  </p>
+  <ul>
+    <li><strong>讀取 <code>wiki/index.md</code> 注入 prompt</strong>，列出既有 Wiki 所有頁面標題</li>
+    <li><strong>遇到既有實體必須用 <code>[[wikilink]]</code></strong>──這是知識能否「接回」既有圖譜的關鍵</li>
+    <li>網路來源以 <code>[N]</code> 編號引用</li>
+    <li>標註矛盾、缺口、值得追加的來源</li>
+    <li>中立、百科式語氣</li>
+  </ul>
+  <p>
+    輸出採用 SSE streaming，每個 token 進來就<code>updateTask({ synthesis: accumulated })</code>，
+    UI 可即時看到內容生成。
+  </p>
+
+  <h4>階段 ⑦ 寫入 Wiki</h4>
+  <p>
+    檔名規則：<code>research-&lt;slug&gt;-&lt;YYYY-MM-DD&gt;.md</code>，存於 <code>wiki/queries/</code>。
+    寫入前先 strip 掉 <code>&lt;think&gt;...&lt;/think&gt;</code> 區塊（含未閉合的）以保持頁面整潔。
+    Frontmatter 含 <code>origin: deep-research</code> 標籤，未來可以據此查詢 / 過濾 / 分析。
+  </p>
+
+  <h4>階段 ⑧ Auto-Ingest（複利累積）</h4>
+  <p>
+    這是<strong>本流程與業界 Deep Research 最大的差異</strong>：研究結果不是「給使用者看完就結束」，
+    而是被當作新來源、再次餵進<strong>兩階段攝入管線</strong>。
+  </p>
+  <pre><code>autoIngest(projectPath, savedPath, llmConfig)
+  ├ Step 1：分析 → 抽取此研究產出的實體 / 概念 / 矛盾
+  └ Step 2：生成 → 建立 / 更新 entity, concept 頁
+                  → 更新 index.md, log.md, overview.md
+                  → wikilink 自動串接回既有頁</code></pre>
+  <p>
+    亦即：一次 Deep Research 至少觸發 <strong>3 次 LLM 呼叫</strong>（topic 優化 1 + 合成 1 + ingest 至少 2 = 通常 4 次），
+    換來的是<strong>研究結果直接成為知識圖譜的新節點</strong>，並可能在下一輪 Insights 分析時又揭露新 Gap，形成自我強化的迴圈。
+  </p>
+
+  <h3>5.5.3 與業界主流 Deep Research 的差異</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>面向</th>
+        <th>OpenAI Deep Research</th>
+        <th>Perplexity Deep Research</th>
+        <th>Gemini Deep Research</th>
+        <th>LLM Wiki (本專案)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>觸發來源</td>
+        <td>使用者自由輸入</td>
+        <td>使用者自由輸入</td>
+        <td>使用者自由輸入</td>
+        <td><span class="pill info">圖譜結構分析</span>（亦支援手動）</td>
+      </tr>
+      <tr>
+        <td>研究架構</td>
+        <td>Agent loop（Plan → Search → Reason → Iterate）</td>
+        <td>Multi-step + 推理</td>
+        <td>Plan → Execute → Refine 迭代</td>
+        <td><span class="pill warn">單次線性 pipeline</span>（無 agent loop）</td>
+      </tr>
+      <tr>
+        <td>查詢數量</td>
+        <td>動態（10–100+）</td>
+        <td>動態</td>
+        <td>動態</td>
+        <td><span class="pill warn">固定 3 個</span>（LLM 預生成）</td>
+      </tr>
+      <tr>
+        <td>耗時 / 成本</td>
+        <td>高（5–30 分鐘、$1+/次）</td>
+        <td>中（1–5 分鐘）</td>
+        <td>高（5–15 分鐘）</td>
+        <td><span class="pill good">低</span>（~1–3 分鐘，~$0.01–0.05）</td>
+      </tr>
+      <tr>
+        <td>上下文來源</td>
+        <td>使用者 prompt + 動態抓取</td>
+        <td>使用者 prompt</td>
+        <td>使用者 prompt + Google 知識</td>
+        <td><span class="pill info">purpose.md + overview.md + index.md</span></td>
+      </tr>
+      <tr>
+        <td>輸出形態</td>
+        <td>一份結構化長篇報告</td>
+        <td>聊天答案 + sources</td>
+        <td>結構化報告 + 編輯介面</td>
+        <td><span class="pill info">Markdown wiki 頁 + 自動建立關聯頁</span></td>
+      </tr>
+      <tr>
+        <td>知識持久化</td>
+        <td>停留在對話內</td>
+        <td>停留在對話內</td>
+        <td>可存到 Docs</td>
+        <td><span class="pill good">直接成為知識圖譜節點，複利累積</span></td>
+      </tr>
+      <tr>
+        <td>下一步觸發</td>
+        <td>需使用者再次提問</td>
+        <td>需使用者再次提問</td>
+        <td>需使用者再次提問</td>
+        <td><span class="pill good">下一輪 Insights 自動偵測新 Gap</span></td>
+      </tr>
+      <tr>
+        <td>引用形式</td>
+        <td>網路來源 footnote</td>
+        <td>網路來源 footnote</td>
+        <td>網路來源 footnote</td>
+        <td><span class="pill info">[N] 網路來源 + [[wikilink]] 內部引用</span></td>
+      </tr>
+      <tr>
+        <td>HITL 介入點</td>
+        <td>結束後</td>
+        <td>結束後</td>
+        <td>結束前可調整綱要</td>
+        <td><span class="pill good">執行前（可編輯 topic + queries）</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.5.4 設計哲學差異</h3>
+
+  <div class="grid grid-2">
+    <div class="card accent">
+      <h4>業界主流：Agent 式深度探索</h4>
+      <p>
+        OpenAI / Gemini 的 DR 採「Agent loop」思路：LLM 自己規劃步驟、迭代搜尋、反思、補洞，
+        產出一份高品質一次性報告。<strong>強項</strong>是單次任務深度與廣度都優越；
+        <strong>弱項</strong>是耗時長、成本高、結果無法複利累積到使用者的知識結構。
+      </p>
+    </div>
+    <div class="card accent">
+      <h4>本專案：圖譜驅動的補洞循環</h4>
+      <p>
+        LLM Wiki 採「Pipeline + 自動 ingest」思路：每次研究是輕量的線性 pipeline（~3 分鐘），
+        但結果<strong>立刻成為持久化的知識節點</strong>，並改變圖譜拓樸、產生新的 Insights，
+        驅動下一輪研究。<strong>強項</strong>是知識複利成長；<strong>弱項</strong>是單次研究深度不如 agent loop。
+      </p>
+    </div>
+  </div>
+
+  <h3>5.5.5 兩種思路的本質區別</h3>
+
+  <pre class="arch-diagram">業界 Deep Research（一次性深度報告）
+
+  使用者問題 ────→ Agent loop ────→ 報告 ────→ 結束
+                  (耗時長、成本高)         （知識停留在報告內）
+
+
+本專案 Deep Research（複利型補洞）
+
+           ┌──&gt;  Insights 偵測 Gap
+           │           │
+           │           ▼
+   Wiki ───┤    Topic 優化 (purpose + overview)
+   知識圖譜 │           │
+           │           ▼
+           │     使用者確認 + 編輯
+           │           │
+           │           ▼
+           │     多查詢搜尋 → LLM 合成（含 wikilink）
+           │           │
+           │           ▼
+           │     寫入 wiki/queries/
+           │           │
+           │           ▼
+           └──   Auto-Ingest → 抽取 entity / concept → 更新 index
+                              （複利累積到圖譜）</pre>
+
+  <h3>5.5.6 適用情境的微妙差別</h3>
+
+  <table>
+    <thead><tr><th>場景</th><th>較適合的方案</th><th>原因</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>一次性深入了解陌生領域</td>
+        <td>OpenAI / Gemini DR</td>
+        <td>Agent loop 能在單次任務中完成廣度 + 深度</td>
+      </tr>
+      <tr>
+        <td>長期累積某主題</td>
+        <td>LLM Wiki</td>
+        <td>每次小步、複利累積、可追溯</td>
+      </tr>
+      <tr>
+        <td>需要結構化的知識網絡</td>
+        <td>LLM Wiki</td>
+        <td>wikilink 交叉引用是內建設計</td>
+      </tr>
+      <tr>
+        <td>截稿前需要交付一份報告</td>
+        <td>OpenAI / Gemini DR</td>
+        <td>單次任務即可</td>
+      </tr>
+      <tr>
+        <td>研究預算極度敏感</td>
+        <td>LLM Wiki</td>
+        <td>單次 ~$0.01–0.05 vs $1+ /份</td>
+      </tr>
+      <tr>
+        <td>需要極新的事實（新聞、財報）</td>
+        <td>OpenAI / Gemini DR</td>
+        <td>Agent loop 會多輪搜尋驗證；本專案僅 3 query × 5 results</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.5.7 三個值得注意的工程細節</h3>
+
+  <div class="card warn">
+    <h4>① 結構性頁面被排除在 Insights 之外</h4>
+    <p>
+      <code>graph-insights.ts</code> 明確將 <code>{ "index", "log", "overview" }</code> 列為 STRUCTURAL_IDS 排除。
+      這些頁面與所有頁都連結，若納入分析會主導 surprising connections，掩蓋真正有趣的訊號。
+      這是個小但重要的工程經驗。
+    </p>
+  </div>
+
+  <div class="card warn">
+    <h4>② Multi-query 是線性 for-loop 而非並發</h4>
+    <p>
+      在 <code>deep-research.ts</code> 中，3 個 query 是用 <code>for...of</code> 串列呼叫 <code>tavilySearch</code>。
+      看似不夠優化，實則合理：Tavily/SerpApi 都有 RPS 限制，串列呼叫穩定性勝過 <code>Promise.all</code>，
+      且整體仍在數秒級。若改並發要加 retry-with-backoff，工程成本不划算。
+    </p>
+  </div>
+
+  <div class="card warn">
+    <h4>③ Auto-Ingest 用 .catch() 而非 await</h4>
+    <p>
+      最後一步 <code>autoIngest(...).catch(err =&gt; console.error(...))</code> 是<strong>火後不理</strong>──
+      任務狀態 <code>done</code> 在寫入 wiki 頁面後立即標記，不等 ingest 完成。
+      這保證了 UI 即時回應，但代價是若 ingest 失敗，使用者只能在 Activity Panel 看到錯誤，
+      研究頁仍會留下、entity/concept 頁卻沒生成。是個合理的 UX/正確性 trade-off。
+    </p>
+  </div>
+
+  <h3>5.5.8 結論：本質上的範式差異</h3>
+  <div class="card accent">
+    <p>
+      LLM Wiki 的 Deep Research 不是「OpenAI DR 的廉價版」，而是<strong>不同的範式</strong>：
+    </p>
+    <ul>
+      <li>業界 DR 是<strong>會話內的長篇報告生成器</strong>──回答一個具體問題，產出一份完整文件</li>
+      <li>本專案 DR 是<strong>圖譜持續演化的維護動作</strong>──修補一個結構缺陷，把結果焊回知識網路</li>
+    </ul>
+    <p>
+      其犧牲了單次研究的深度與廣度，換來了：
+    </p>
+    <ol>
+      <li><strong>觸發自動化</strong>：研究主題不靠使用者靈感，靠演算法</li>
+      <li><strong>結果持久化</strong>：研究產出不停留在對話，直接改變知識圖譜結構</li>
+      <li><strong>複利累積</strong>：每次研究都可能在下一輪 Insights 中再被發現新缺口</li>
+      <li><strong>成本低廉</strong>：可大量、頻繁使用，而非「重大研究任務」才動用</li>
+    </ol>
+    <p>
+      這個設計極度切合 LLM Wiki「個人長期知識複利」的核心定位。如果你期待 ChatGPT Deep Research 等級的單次報告品質，
+      本專案無法達成；但若你接受「每天小步、長期累積」，本專案的迴路反而比 agent loop 更貼合真實知識工作的節奏。
+    </p>
+  </div>
 </section>
 
 <!-- ===================== 6. 優點 ===================== -->
