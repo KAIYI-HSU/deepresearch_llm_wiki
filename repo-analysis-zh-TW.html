@@ -580,9 +580,9 @@ Phase 4：上下文組裝
   </ul>
 </section>
 
-<!-- ===================== 5.5 Deep Research 生命週期 ===================== -->
+<!-- ===================== 5.7 Deep Research 生命週期 ===================== -->
 <section id="deep-research">
-  <h2><span class="num">5.5</span>Deep Research 完整生命週期深度解析</h2>
+  <h2><span class="num">5.7</span>Deep Research 完整生命週期深度解析</h2>
 
   <p>
     本節獨立探討這份 repo 最具特色的設計之一：<strong>從 Graph Insights 自動觸發 Deep Research</strong> 的完整流程。
@@ -590,7 +590,7 @@ Phase 4：上下文組裝
     並與業界主流 Deep Research 產品（OpenAI、Perplexity、Gemini DR）形成顯著差異。
   </p>
 
-  <h3>5.5.1 八階段生命週期總覽</h3>
+  <h3>5.7.1 八階段生命週期總覽</h3>
   <pre class="arch-diagram">┌────────────────────────────────────────────────────────────────────────┐
 │  ① 圖譜結構分析（純前端、無 LLM 呼叫）                                   │
 │     graph-insights.ts                                                  │
@@ -662,7 +662,7 @@ Phase 4：上下文組裝
                                   ▼
                        <strong>知識圖譜更新</strong> → 觸發下一輪 Insights</pre>
 
-  <h3>5.5.2 階段細節剖析</h3>
+  <h3>5.7.2 階段細節剖析</h3>
 
   <h4>階段 ① 圖譜結構分析（觸發點）</h4>
   <p>
@@ -779,7 +779,7 @@ Phase 4：上下文組裝
     換來的是<strong>研究結果直接成為知識圖譜的新節點</strong>，並可能在下一輪 Insights 分析時又揭露新 Gap，形成自我強化的迴圈。
   </p>
 
-  <h3>5.5.3 與業界主流 Deep Research 的差異</h3>
+  <h3>5.7.3 與業界主流 Deep Research 的差異</h3>
 
   <table>
     <thead>
@@ -865,7 +865,7 @@ Phase 4：上下文組裝
     </tbody>
   </table>
 
-  <h3>5.5.4 設計哲學差異</h3>
+  <h3>5.7.4 設計哲學差異</h3>
 
   <div class="grid grid-2">
     <div class="card accent">
@@ -886,7 +886,7 @@ Phase 4：上下文組裝
     </div>
   </div>
 
-  <h3>5.5.5 兩種思路的本質區別</h3>
+  <h3>5.7.5 兩種思路的本質區別</h3>
 
   <pre class="arch-diagram">業界 Deep Research（一次性深度報告）
 
@@ -914,7 +914,7 @@ Phase 4：上下文組裝
            └──   Auto-Ingest → 抽取 entity / concept → 更新 index
                               （複利累積到圖譜）</pre>
 
-  <h3>5.5.6 適用情境的微妙差別</h3>
+  <h3>5.7.6 適用情境的微妙差別</h3>
 
   <table>
     <thead><tr><th>場景</th><th>較適合的方案</th><th>原因</th></tr></thead>
@@ -952,7 +952,7 @@ Phase 4：上下文組裝
     </tbody>
   </table>
 
-  <h3>5.5.7 三個值得注意的工程細節</h3>
+  <h3>5.7.7 三個值得注意的工程細節</h3>
 
   <div class="card warn">
     <h4>① 結構性頁面被排除在 Insights 之外</h4>
@@ -982,7 +982,7 @@ Phase 4：上下文組裝
     </p>
   </div>
 
-  <h3>5.5.8 結論：本質上的範式差異</h3>
+  <h3>5.7.8 結論：本質上的範式差異</h3>
   <div class="card accent">
     <p>
       LLM Wiki 的 Deep Research 不是「OpenAI DR 的廉價版」，而是<strong>不同的範式</strong>：
