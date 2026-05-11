@@ -175,6 +175,32 @@
     padding: 10px 14px; border-top: 1px solid var(--border);
     background: var(--panel-2);
   }
+
+  details.collapsible {
+    margin: 16px 0;
+  }
+  details.collapsible > summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--accent);
+    font-weight: 600;
+    list-style: none;
+  }
+  details.collapsible > summary::-webkit-details-marker { display: none; }
+  details.collapsible[open] > summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  details.collapsible > pre {
+    margin-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    max-height: 640px;
+    overflow: auto;
+  }
 </style>
 </head>
 <body>
@@ -206,6 +232,7 @@
     <li><a href="#features">主要功能</a></li>
     <li><a href="#tech-detail">技術細節</a></li>
     <li><a href="#deep-research">Deep Research 生命週期</a></li>
+    <li><a href="#retrieval-citation">檢索 &amp; 引用</a></li>
     <li><a href="#strengths">優點</a></li>
     <li><a href="#weaknesses">缺點</a></li>
     <li><a href="#use-cases">使用場景</a></li>
@@ -1003,6 +1030,599 @@ Phase 4：上下文組裝
     <p>
       這個設計極度切合 LLM Wiki「個人長期知識複利」的核心定位。如果你期待 ChatGPT Deep Research 等級的單次報告品質，
       本專案無法達成；但若你接受「每天小步、長期累積」，本專案的迴路反而比 agent loop 更貼合真實知識工作的節奏。
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 5.8 Retrieval & Citation ===================== -->
+<section id="retrieval-citation">
+  <h2><span class="num">5.8</span>Retrieval &amp; Citation 完整生命週期</h2>
+
+  <p>
+    上節聚焦 Deep Research 的<strong>流程</strong>，本節進一步剖析其<strong>檢索（retrieval）與引用管理（citation management）</strong>
+    的內部機制。這部分是整個專案最被低估的設計細節──Deep Research 之所以能讓研究成果<strong>正確接回 Wiki 圖譜</strong>，
+    關鍵就在這套「雙軌檢索 + 雙軌引用 + 後置串接」的協作。
+  </p>
+
+  <h3>5.8.1 雙軌檢索（Dual-Track Retrieval）</h3>
+  <p>
+    Deep Research 的檢索<strong>不走主聊天的 RRF 管線</strong>，而是另設一條極簡的雙軌設計：
+  </p>
+
+  <table>
+    <thead><tr><th>軌</th><th>來源</th><th>用途</th><th>實作位置</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>外部軌</td>
+        <td>Tavily / SerpApi (3 queries × 5 results)</td>
+        <td><strong>合成正文的主要事實來源</strong></td>
+        <td><code>deep-research.ts:76-91</code> + <code>web-search.ts</code></td>
+      </tr>
+      <tr>
+        <td>內部軌</td>
+        <td><strong>僅</strong> <code>wiki/index.md</code></td>
+        <td>提供既有頁面清單，<strong>讓 LLM 知道哪些 entity 該打 wikilink</strong></td>
+        <td><code>deep-research.ts:107-112</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card warn">
+    <h4>關鍵設計決策：為什麼不讀內部頁面全文？</h4>
+    <p>
+      主聊天會 Phase 1-4 把相關頁面內容塞進上下文。Deep Research <strong>刻意只讀 index.md</strong>，原因有三：
+    </p>
+    <ol>
+      <li><strong>避免污染外部研究結論</strong>──若塞入內部頁面，LLM 可能會「重述既有知識」而非「整合新資訊」</li>
+      <li><strong>節省 token</strong>──研究是新內容，內部全文是冗餘上下文</li>
+      <li><strong>只需「標題清單」即可建立 wikilink 連結</strong>──知道有 <code>anthropic.md</code> 就能寫 <code>[[anthropic]]</code></li>
+    </ol>
+  </div>
+
+  <h3>5.8.2 多查詢策略：3 × 5 × URL Dedup</h3>
+  <pre><code>// deep-research.ts:73-91
+const allResults: WebSearchResult[] = []
+const seenUrls = new Set&lt;string&gt;()
+
+for (const query of queries) {  // 串列、非並發
+  try {
+    const results = await webSearch(query, searchConfig, 5)
+    for (const r of results) {
+      if (!seenUrls.has(r.url)) {
+        seenUrls.add(r.url)
+        allResults.push(r)
+      }
+    }
+  } catch {
+    // continue with other queries — 單 query 失敗不擋整體
+  }
+}</code></pre>
+
+  <p>三個關鍵抉擇：</p>
+  <ul>
+    <li><strong>固定 3 query × 5 result</strong>：上限 15 筆，去重後通常 8–12 筆，能控制 LLM context size</li>
+    <li><strong>串列而非並發</strong>：Tavily/SerpApi RPS 限制，串列更穩、整體仍在數秒級</li>
+    <li><strong>URL 而非 hash 去重</strong>：簡單但有效；同一篇文章從不同搜尋引擎來可能有不同 query string，這裡用 raw URL 比對</li>
+  </ul>
+
+  <h3>5.8.3 Tavily API 的細節參數</h3>
+  <pre><code>// web-search.ts:90-100
+await httpFetch("https://api.tavily.com/search", {
+  method: "POST",
+  body: JSON.stringify({
+    api_key: apiKey,
+    query,
+    max_results: maxResults,
+    search_depth: "advanced",     // 深度抓取全文，非 snippet
+    include_answer: false,        // 不要 Tavily 自己合成答案
+  }),
+})</code></pre>
+  <p>
+    <code>search_depth: "advanced"</code> 是關鍵 —— 它讓 Tavily 回傳<strong>完整正文</strong>（截斷較少），
+    這是後續 LLM 合成品質的基礎。<code>include_answer: false</code> 則明確拒絕 Tavily 的「快速答案」，
+    因為合成這項工作要交給後面的 LLM 配合 wiki 上下文一起做。
+  </p>
+
+  <h3>5.8.4 雙軌引用（Dual-Track Citation）</h3>
+  <p>
+    引用格式分兩種，由 system prompt 強制：
+  </p>
+
+  <table>
+    <thead><tr><th>引用類型</th><th>格式</th><th>指向</th><th>後續處理</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>外部來源</td>
+        <td><code>[N]</code>（N 為編號）</td>
+        <td>網路文章</td>
+        <td>寫入頁尾 <code>## References</code> 章節</td>
+      </tr>
+      <tr>
+        <td>內部關聯</td>
+        <td><code>[[wikilink]]</code></td>
+        <td>既有 Wiki 頁</td>
+        <td>觸發圖譜邊建立（autoIngest 後）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>System prompt 中的明確指令：</p>
+  <pre><code>"## Cross-referencing (IMPORTANT)"
+"- The wiki already has existing pages listed in the Wiki Index below."
+"- When your synthesis mentions an entity or concept that exists in the wiki,"
+"  ALWAYS use [[wikilink]] syntax to link to it."
+"- For example, if the wiki has an entity 'anthropic', write [[anthropic]]"
+"  when mentioning it."
+"- This is critical for connecting new research to existing knowledge in the graph."
+
+"## Writing Rules"
+"- Organize into clear sections with headings"
+"- Cite web sources using [N] notation"
+"- Note contradictions or gaps"
+"- Suggest additional sources worth finding"
+"- Neutral, encyclopedic tone"</code></pre>
+
+  <h3>5.8.5 引用組裝（Citation Assembly）</h3>
+  <p>合成完成後，<code>References</code> 章節由程式碼<strong>自動產生</strong>，並非交由 LLM 自己整理：</p>
+
+  <pre><code>// deep-research.ts:173-175
+const references = webResults
+  .map((r, i) =&gt; `${i + 1}. [${r.title}](${r.url}) — ${r.source}`)
+  .join("\n")
+
+// 寫入頁面結構：
+"---"
+"type: query"
+`title: "Research: ${topic}"`
+"created: 2026-05-11"
+"origin: deep-research"
+"tags: [research]"
+"---"
+""
+`# Research: ${topic}`
+""
+&lt;cleanedSynthesis&gt;       // LLM 合成本文（含 [N] 與 [[wikilink]]）
+""
+"## References"           // 程式自動產生
+""
+&lt;references&gt;             // 對應的 1, 2, 3...</code></pre>
+
+  <p>
+    這個分工很關鍵：<strong>LLM 負責「使用」引用編號，程式負責「對應」實際 URL</strong>。
+    避免了 LLM 編造不存在的網址（hallucinated citations）這個業界常見問題。
+  </p>
+
+  <h3>5.8.6 引用清理：去除 &lt;think&gt; 區塊</h3>
+  <p>寫入磁碟前還有一道清理：</p>
+  <pre><code>// deep-research.ts:178-181
+const cleanedSynthesis = accumulated
+  .replace(/&lt;think(?:ing)?&gt;\s*[\s\S]*?&lt;\/think(?:ing)?&gt;\s*/gi, "")  // 閉合的
+  .replace(/&lt;think(?:ing)?&gt;\s*[\s\S]*$/gi, "")                    // 未閉合的
+  .trimStart()</code></pre>
+  <p>
+    這對 DeepSeek、QwQ 等會輸出推理過程的模型必要。
+    UI 顯示時可以摺疊展示 thinking，但儲存到 wiki 時不該污染最終內容。
+    兩個 regex 分別處理「閉合」與「stream 中途意外結束」情形。
+  </p>
+
+  <h3>5.8.7 後置串接：Auto-Ingest 把引用焊回圖譜</h3>
+  <p>
+    研究頁存好後，最關鍵的「引用持久化」其實發生在<code>autoIngest()</code>：
+  </p>
+
+  <pre class="arch-diagram">研究頁 (wiki/queries/research-xxx-date.md)
+   含: "...Anthropic 公司開發的 [[anthropic]] 模型..."  ← LLM 寫入的 wikilink
+       "## References\n1. [Title](url)..."             ← 程式產生的外部引用
+                  │
+                  ▼ autoIngest(researchPagePath, ...)
+                  │
+   ┌──────────────────────────────────────────────────┐
+   │ Step 1 (分析)：LLM 讀研究頁                       │
+   │   - 抽取實體：[anthropic, claude, ...]            │
+   │   - 抽取概念：[constitutional-ai, ...]            │
+   │   - 偵測矛盾                                      │
+   └──────────────────────────────────────────────────┘
+                  │
+                  ▼
+   ┌──────────────────────────────────────────────────┐
+   │ Step 2 (生成)：LLM 建立 / 更新關聯頁             │
+   │   - wiki/entities/anthropic.md                   │
+   │     frontmatter: sources: ["research-xxx.md"]    │
+   │   - wiki/concepts/constitutional-ai.md           │
+   │     frontmatter: sources: ["research-xxx.md"]    │
+   │   - 更新 index.md, log.md                        │
+   └──────────────────────────────────────────────────┘
+                  │
+                  ▼
+   ┌──────────────────────────────────────────────────┐
+   │ 知識圖譜變化：                                    │
+   │   - 研究頁 ←─sources──→ entity/concept 頁         │
+   │   - "Source overlap" 訊號（×4.0）自動建立邊       │
+   │   - 與既有頁面共享 source 者全部產生圖譜連線      │
+   └──────────────────────────────────────────────────┘</pre>
+
+  <p>
+    這就是<strong>「引用持久化」的本質</strong>：研究頁的 <code>[[wikilink]]</code> 不只是顯示用的連結文字，
+    而是觸發 ingest 管線、讓研究結果<strong>反向連回</strong>既有實體頁面的種子。
+    最終的圖譜邊由 4 訊號相關性模型（見 5.2）計算──其中<strong>「來源重疊」×4.0 是最強訊號</strong>。
+  </p>
+
+  <h3>5.8.8 與主聊天 Retrieval 的對照</h3>
+
+  <table>
+    <thead><tr><th>維度</th><th>主聊天 (chat-panel.tsx)</th><th>Deep Research</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>檢索來源</td>
+        <td>內部 Wiki 全文 + 向量 + 圖譜擴展</td>
+        <td>外部網路 + 內部 index.md</td>
+      </tr>
+      <tr>
+        <td>Fusion</td>
+        <td>RRF (K=60)，融合 token rank 與 vector rank</td>
+        <td>URL set 去重</td>
+      </tr>
+      <tr>
+        <td>檢索結果數</td>
+        <td>動態：top 10 + 圖譜 2-hop 擴展</td>
+        <td>固定：3 query × 5 result（≤15）</td>
+      </tr>
+      <tr>
+        <td>Context 預算</td>
+        <td>依 maxCtx 比例分配（5/50/30/15）</td>
+        <td>無預算（合成是新內容主體）</td>
+      </tr>
+      <tr>
+        <td>Citation 格式</td>
+        <td><code>[1]..[N]</code> + 隱藏 <code>&lt;!-- cited: 1,3,5 --&gt;</code></td>
+        <td><code>[N]</code> 外部 + <code>[[wikilink]]</code> 內部</td>
+      </tr>
+      <tr>
+        <td>Citation 追蹤</td>
+        <td><code>extractCitedPages()</code> → UI 引用卡片</td>
+        <td><code>## References</code> 寫入 markdown</td>
+      </tr>
+      <tr>
+        <td>結果持久化</td>
+        <td>聊天訊息（除非 Save to Wiki）</td>
+        <td>永久 Wiki 頁 + 自動 ingest 出新節點</td>
+      </tr>
+      <tr>
+        <td>引用追溯到圖譜</td>
+        <td>無（聊天訊息不在圖譜內）</td>
+        <td>透過 <code>sources: []</code> frontmatter 永久串接</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.8.9 設計權衡與已知限制</h3>
+
+  <div class="grid grid-2">
+    <div class="card warn">
+      <h4>① LLM 可能誤判 wikilink 目標</h4>
+      <p>
+        LLM 看到 index.md 中有 <code>anthropic</code>，可能會在不該打的場景也打 <code>[[anthropic]]</code>
+        （例如另一家公司也叫 anthropic 的虛構場景）。當前沒有後驗證機制。
+      </p>
+    </div>
+    <div class="card warn">
+      <h4>② 不檢測 dead wikilink</h4>
+      <p>
+        若 LLM 編造 <code>[[non-existent-page]]</code>，目前流程不會在合成階段檢出，
+        要等到後續 Lint 才會發現。原因：合成時不知道哪些頁面真實存在（只看 index.md）。
+      </p>
+    </div>
+    <div class="card warn">
+      <h4>③ Citation 不去重</h4>
+      <p>
+        若 LLM 連續用 <code>[1][1]</code>，References 章節仍然只列一次（程式產生時是 webResults 一對一映射），
+        但若 LLM 跳號（用了 [5] 但沒用 [1]–[4]），References 仍會列所有 5 筆 —— 預期是「列出全部，讓使用者自己看」。
+      </p>
+    </div>
+    <div class="card warn">
+      <h4>④ Source overlap 計算延遲</h4>
+      <p>
+        圖譜邊「source overlap」依賴 autoIngest 完成；若 autoIngest 失敗（火後不理），
+        研究頁就成了孤立節點，需要使用者手動重 ingest。
+      </p>
+    </div>
+  </div>
+
+  <h3>5.8.10 給其他 Coding Agent 的重現 Prompt</h3>
+
+  <p>
+    以下是一份<strong>自包含的 prompt</strong>，可交付給任意 coding agent（Claude Code、Cursor、Codex、Gemini Code Assist 等）以重現本套
+    Retrieval &amp; Citation 邏輯。直接複製整段即可：
+  </p>
+
+  <details class="collapsible">
+    <summary>📋 點此展開 / 摺疊 Reproduction Prompt（可直接複製）</summary>
+
+<pre><code># Task: Reproduce LLM-Wiki's Deep Research Retrieval &amp; Citation System
+
+You are tasked with implementing a Deep Research pipeline that retrieves
+information from the web AND cross-references it against an existing personal
+wiki, producing a markdown research page with structured citations. The output
+must be ingestible by a separate ingest pipeline to extract entities/concepts
+into the wiki graph.
+
+## High-Level Goals
+
+1. Given a user-confirmed research topic + 3 search queries, run multi-query
+   web search and synthesize results into a wiki-compatible markdown page.
+2. Produce TWO kinds of citations:
+   - `[N]` numeric brackets pointing to external web sources
+   - `[[wikilink]]` syntax pointing to existing wiki entities/concepts
+3. Make the result auto-ingestible — the wikilinks must form valid graph
+   edges when a downstream ingest pipeline processes the page.
+
+## Interface Contract
+
+```typescript
+interface ResearchInput {
+  projectPath: string;           // root of the wiki project on disk
+  topic: string;                 // user-confirmed research topic
+  searchQueries: string[];       // 3 queries (length is conventional, not enforced)
+  llmConfig: LlmConfig;          // streaming LLM client config
+  searchConfig: SearchApiConfig; // Tavily or SerpApi credentials
+}
+
+interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;  // FULL content if provider supports it
+  source: string;   // hostname, e.g. "arxiv.org"
+}
+
+interface ResearchTask {
+  id: string;
+  topic: string;
+  searchQueries: string[];
+  status: "queued" | "searching" | "synthesizing" | "saving" | "done" | "error";
+  webResults: WebSearchResult[];
+  synthesis: string;          // accumulated LLM output
+  savedPath: string | null;   // relative to projectPath
+  error: string | null;
+}
+```
+
+## Stage 1: Multi-Query Web Search (Dual-Track Retrieval)
+
+```typescript
+async function executeRetrieval(
+  queries: string[],
+  searchConfig: SearchApiConfig,
+): Promise&lt;WebSearchResult[]&gt; {
+  const allResults: WebSearchResult[] = [];
+  const seenUrls = new Set&lt;string&gt;();
+
+  // DESIGN: serial, not parallel. Search providers rate-limit; serial keeps
+  // it simple and total time stays in seconds. DO NOT use Promise.all.
+  for (const query of queries) {
+    try {
+      const results = await webSearch(query, searchConfig, 5);
+      for (const r of results) {
+        if (!seenUrls.has(r.url)) {
+          seenUrls.add(r.url);
+          allResults.push(r);
+        }
+      }
+    } catch {
+      // DESIGN: tolerate single-query failure. Continue with remaining.
+    }
+  }
+  return allResults;
+}
+
+// Tavily call MUST use these parameters:
+//   search_depth: "advanced"   — full content, not snippets
+//   include_answer: false      — we synthesize ourselves, not Tavily
+//   max_results: 5             — per query
+```
+
+## Stage 2: Internal Lightweight Retrieval
+
+```typescript
+// DESIGN: read ONLY wiki/index.md. Do NOT read full page content. Rationale:
+//   1. We want NEW synthesis from external sources, not echoes of existing wiki.
+//   2. Saves tokens — internal full text is irrelevant to the new content.
+//   3. We only need page TITLES so the LLM knows what [[wikilinks]] are valid.
+const wikiIndex = await readFile(`${projectPath}/wiki/index.md`).catch(() =&gt; "");
+```
+
+## Stage 3: LLM Synthesis with Dual-Track Citation
+
+The system prompt MUST contain these sections in this order:
+
+```
+You are a research assistant. Synthesize the web search results into a
+comprehensive wiki page.
+
+&lt;language directive — match the topic's language&gt;
+
+## Cross-referencing (IMPORTANT)
+- The wiki already has existing pages listed in the Wiki Index below.
+- When your synthesis mentions an entity or concept that exists in the wiki,
+  ALWAYS use [[wikilink]] syntax to link to it.
+- For example, if the wiki has an entity 'anthropic', write [[anthropic]]
+  when mentioning it.
+- This is critical for connecting new research to existing knowledge in the
+  graph.
+
+## Writing Rules
+- Organize into clear sections with headings
+- Cite web sources using [N] notation
+- Note contradictions or gaps
+- Suggest additional sources worth finding
+- Neutral, encyclopedic tone
+
+## Existing Wiki Index (link to these pages with [[wikilink]])
+&lt;contents of wiki/index.md&gt;
+```
+
+The user message MUST format the web results as numbered entries — these
+numbers become the [N] citations:
+
+```
+Research topic: **${topic}**
+
+## Web Search Results
+
+[1] **${result1.title}** (${result1.source})
+${result1.snippet}
+
+[2] **${result2.title}** (${result2.source})
+${result2.snippet}
+
+... etc ...
+
+Synthesize into a wiki page.
+```
+
+The LLM call MUST be streaming — accumulate tokens and update the task's
+`synthesis` field on every token so the UI shows progress.
+
+## Stage 4: Citation Assembly (NOT delegated to LLM)
+
+```typescript
+// CRITICAL: the References section is built by code, not LLM. This prevents
+// hallucinated URLs.
+const references = webResults
+  .map((r, i) =&gt; `${i + 1}. [${r.title}](${r.url}) — ${r.source}`)
+  .join("\n");
+```
+
+## Stage 5: Pre-Save Cleanup
+
+```typescript
+// Strip &lt;think&gt; / &lt;thinking&gt; blocks (DeepSeek, QwQ etc. emit these).
+// Handle both closed and unclosed (stream truncation) cases.
+const cleanedSynthesis = accumulated
+  .replace(/&lt;think(?:ing)?&gt;\s*[\s\S]*?&lt;\/think(?:ing)?&gt;\s*/gi, "")  // closed
+  .replace(/&lt;think(?:ing)?&gt;\s*[\s\S]*$/gi, "")                     // unclosed
+  .trimStart();
+```
+
+## Stage 6: Persist as Markdown
+
+File path: `${projectPath}/wiki/queries/research-${slug}-${YYYY-MM-DD}.md`
+
+```typescript
+const slug = topic.toLowerCase()
+  .replace(/[^a-z0-9\s-]/g, "")
+  .trim()
+  .replace(/\s+/g, "-")
+  .slice(0, 50);
+```
+
+File content:
+
+```markdown
+---
+type: query
+title: "Research: ${escapedTopic}"
+created: ${YYYY-MM-DD}
+origin: deep-research
+tags: [research]
+---
+
+# Research: ${topic}
+
+${cleanedSynthesis}
+
+## References
+
+${references}
+```
+
+`escapedTopic` MUST escape any `"` characters as `\"`.
+
+## Stage 7: Auto-Ingest Trigger (Fire-and-Forget)
+
+```typescript
+// DESIGN: not awaited. UI marks task "done" before ingest finishes.
+// Trade-off accepted: faster UX, but if ingest fails, the entity/concept
+// pages don't get created automatically and Activity Panel shows the error.
+autoIngest(projectPath, savedPath, llmConfig).catch((err) =&gt; {
+  console.error("Failed to auto-ingest research result:", err);
+});
+```
+
+## Concurrency &amp; Queue
+
+- Maintain a task queue with state machine:
+    queued → searching → synthesizing → saving → done | error
+- Hard limit: maxConcurrent = 3. More than this triggers provider rate
+  limits on most LLM backends.
+- Tasks beyond the limit wait in `queued`; pick the next when one finishes.
+
+## Mandatory Tests
+
+1. **Multi-query dedup**: 3 queries returning overlapping URLs collapse to a
+   single result set. Verify via Set size.
+2. **Tavily failure tolerance**: One of three queries throws → other two
+   still produce results and synthesis runs.
+3. **Empty results path**: All queries return zero results → task transitions
+   to `done` with synthesis = "No web results found." Auto-ingest skipped.
+4. **&lt;think&gt; block stripping**: Synthesis containing `&lt;think&gt;...&lt;/think&gt;`
+   blocks (closed and unclosed) is cleaned before save.
+5. **Frontmatter quote escaping**: A topic containing `"` characters
+   produces valid YAML frontmatter.
+6. **Slug edge cases**: Topic with unicode, emojis, very long text → slug
+   stays ≤50 chars and only `[a-z0-9-]`.
+7. **Wikilink survival**: A synthesis containing `[[anthropic]]` is
+   preserved verbatim through save.
+8. **References numbering matches**: If webResults has N items, References
+   section has exactly N numbered lines.
+
+## Non-Goals (Do NOT implement)
+
+- DO NOT add agentic iteration (no plan→search→reflect→retry loop).
+- DO NOT validate that wikilinks point to existing pages at synthesis time.
+  Lint phase (separate pipeline) handles that.
+- DO NOT deduplicate citations in the synthesis — `[1][1]` stays as written.
+- DO NOT generate the References section with the LLM. Build it from code.
+- DO NOT read internal wiki page bodies — only `wiki/index.md`.
+
+## Key Implementation Files (in the reference codebase)
+
+| File | Purpose |
+|------|---------|
+| `src/lib/deep-research.ts` | Pipeline orchestration |
+| `src/lib/web-search.ts` | Tavily / SerpApi adapters |
+| `src/lib/optimize-research-topic.ts` | Pre-stage topic refinement |
+| `src/stores/research-store.ts` | Zustand task queue |
+| `src/lib/ingest.ts` (autoIngest) | Downstream extraction |
+
+## Acceptance Criteria
+
+When you've finished:
+1. Running the pipeline on a fresh wiki produces a valid markdown file at
+   `wiki/queries/research-&lt;slug&gt;-&lt;date&gt;.md`
+2. The file contains exactly one `## References` section, programmatically
+   produced
+3. `[[wikilinks]]` in the body are LLM-produced and unmodified by code
+4. `&lt;think&gt;` blocks are absent from the saved file
+5. Auto-ingest is triggered without blocking task completion
+6. All 8 mandatory tests pass
+</code></pre>
+  </details>
+
+  <h3>5.8.11 結論</h3>
+  <div class="card accent">
+    <p>
+      LLM Wiki 的 Retrieval &amp; Citation 設計核心是<strong>「分離關注點，讓 LLM 只做它擅長的」</strong>：
+    </p>
+    <ul>
+      <li><strong>檢索</strong>由程式控制（多 query、URL 去重、固定上限）—— 確定性、可重現</li>
+      <li><strong>合成</strong>由 LLM 負責 —— 創造性整合，使用 <code>[N]</code> 與 <code>[[wikilink]]</code></li>
+      <li><strong>引用組裝</strong>由程式控制（References 章節從 webResults 自動產生）—— 防止幻覺 URL</li>
+      <li><strong>引用持久化</strong>由 autoIngest 透過 <code>sources: []</code> frontmatter 完成 —— 永久串接到圖譜</li>
+    </ul>
+    <p>
+      這個分工讓系統<strong>同時具備創造力與可靠性</strong>：LLM 寫的部分有彈性，
+      但 URL 引用是 deterministic 的；wikilink 仰賴 LLM 判斷，但圖譜邊的最終計算
+      靠 4 訊號相關性模型而非 LLM 的主觀關聯。整套設計才能讓研究結果<strong>正確、永久地</strong>融入知識網路。
     </p>
   </div>
 </section>
